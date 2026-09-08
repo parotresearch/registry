@@ -123,6 +123,7 @@ class Ctx:
     token: str | None
     reader_cmd_prefix: list[str] | None  # e.g. ["/path/to/cartridge"] or docker wrapper
     repo: str | None  # "owner/name" for the rate-limit search
+    download_cache: list = None  # memoised downloaded file path (single-element box)
 
 
 # ---------------------------------------------------------------------------
@@ -288,10 +289,36 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def resolve_file(ctx: Ctx) -> Path | None:
+    """The cartridge file to inspect, or None only when offline with no --file.
+
+    A download failure RAISES (so it becomes a loud FAIL verdict at the check
+    boundary) rather than returning None, which would masquerade as a skip.
+    """
+    if ctx.local_file is not None:
+        return ctx.local_file
+    if ctx.skip_network:
+        return None
+    if ctx.download_cache and ctx.download_cache[0] is not None:
+        return ctx.download_cache[0]
+    dest_dir = REPO_ROOT / ".cartridge-download"
+    dest_dir.mkdir(exist_ok=True)
+    dest = dest_dir / ctx.doc["filename"]
+    with requests.get(ctx.doc["urls"][0], stream=True, timeout=HTTP_TIMEOUT) as resp:
+        resp.raise_for_status()
+        with dest.open("wb") as handle:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                handle.write(chunk)
+    if ctx.download_cache is not None:
+        ctx.download_cache[0] = dest
+    return dest
+
+
 def check_bytes(ctx: Ctx) -> list[Verdict]:
-    if ctx.local_file is None:
+    local = resolve_file(ctx)
+    if local is None:
         return _skip("bytes", "no cartridge file available (network disabled and no --file)")
-    actual = _sha256(ctx.local_file)
+    actual = _sha256(local)
     if actual != ctx.doc["sha256"]:
         return _fail("bytes", f"sha256 {actual} != listing sha256 {ctx.doc['sha256']}")
     return _pass("bytes", f"sha256 matches ({actual[:12]}...)")
@@ -322,14 +349,12 @@ def first_diff(a, b, path: str = "card"):
     return None
 
 
-def run_reader(ctx: Ctx) -> dict:
-    """Run the cartridge reader on the local file, returning its info JSON."""
-    prefix = ctx.reader_cmd_prefix
-    assert prefix is not None  # guarded by the caller
+def run_reader(prefix: list[str], file_path: Path) -> dict:
+    """Run the cartridge reader on the file, returning its info JSON."""
     if "{file}" in " ".join(prefix):
-        cmd = [part.replace("{file}", str(ctx.local_file)) for part in prefix]
+        cmd = [part.replace("{file}", str(file_path)) for part in prefix]
     else:
-        cmd = [*prefix, "info", "--json", str(ctx.local_file)]
+        cmd = [*prefix, "info", "--json", str(file_path)]
     completed = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if completed.returncode != 0:
         raise RuntimeError(
@@ -341,9 +366,10 @@ def run_reader(ctx: Ctx) -> dict:
 def check_card(ctx: Ctx) -> list[Verdict]:
     if ctx.reader_cmd_prefix is None:
         return _skip("card-check", "reader not configured (set CARTRIDGE_BIN or the CI reader vars)")
-    if ctx.local_file is None:
+    local = resolve_file(ctx)
+    if local is None:
         return _skip("card-check", "no cartridge file available to read")
-    info = run_reader(ctx)
+    info = run_reader(ctx.reader_cmd_prefix, local)
     if not info.get("sealed", False):
         return _fail("card-check", "reader reports the file is not sealed")
     file_card = info.get("card")
@@ -445,24 +471,6 @@ def parse_codeowners(path: Path) -> set[str]:
     return owners
 
 
-def acquire_file(doc: dict, explicit: Path | None, skip_network: bool) -> Path | None:
-    if explicit is not None:
-        if not explicit.exists():
-            raise FileNotFoundError(f"--file {explicit} does not exist")
-        return explicit
-    if skip_network:
-        return None
-    dest_dir = REPO_ROOT / ".cartridge-download"
-    dest_dir.mkdir(exist_ok=True)
-    dest = dest_dir / doc["filename"]
-    with requests.get(doc["urls"][0], stream=True, timeout=HTTP_TIMEOUT) as resp:
-        resp.raise_for_status()
-        with dest.open("wb") as handle:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                handle.write(chunk)
-    return dest
-
-
 def reader_prefix() -> list[str] | None:
     """The command prefix that runs the reader, or None when unconfigured.
 
@@ -545,9 +553,11 @@ def main(
     last_ctx: Ctx | None = None
     last_verdicts: list[Verdict] = []
 
+    if file is not None and not file.exists():
+        raise FileNotFoundError(f"--file {file} does not exist")
+
     for listing in listings:
         doc = json.loads(listing.read_text())
-        local_file = acquire_file(doc, file, skip_network)
         ctx = Ctx(
             doc=doc,
             path=listing,
@@ -557,10 +567,11 @@ def main(
             codeowners=owner_set,
             base_doc=base_doc,
             skip_network=skip_network,
-            local_file=local_file,
+            local_file=file,
             token=token,
             reader_cmd_prefix=prefix,
             repo=repo,
+            download_cache=[None],
         )
         verdicts = run_checks(ctx)
         ok = not any(v.status == "fail" for v in verdicts)

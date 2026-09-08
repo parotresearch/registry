@@ -240,6 +240,45 @@ def test_url_reachable_skips_offline(validate, pass_listing):
     assert validate.check_url_reachable(ctx)[0].status == "skip"
 
 
+class _HeadOkGetFailsHandler(http.server.BaseHTTPRequestHandler):
+    """HEAD succeeds with the right size, but the actual download 404s."""
+
+    payload = b""
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(self.payload)))
+        self.end_headers()
+
+    def do_GET(self):
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def test_download_failure_is_loud_fail_not_masked_skip(validate, pass_listing, cart_file):
+    # Regression: a dead download must be a FAIL verdict, never a crash and
+    # never a bytes SKIP that hides behind a green url-reachable.
+    payload = cart_file.read_bytes()
+    _HeadOkGetFailsHandler.payload = payload
+    httpd = socketserver.TCPServer(("127.0.0.1", 0), _HeadOkGetFailsHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        doc = copy.deepcopy(pass_listing)
+        doc["size_bytes"] = len(payload)
+        doc["urls"] = [f"http://127.0.0.1:{port}/x.cart"]
+        ctx = make_ctx(validate, doc, skip_network=False, download_cache=[None])
+        verdicts = validate.run_checks(ctx)
+        assert status_of(verdicts, "url-reachable") == "pass"  # HEAD is fine
+        assert status_of(verdicts, "bytes") == "fail"  # GET 404 -> loud fail
+    finally:
+        httpd.shutdown()
+
+
 # --------------------------------------------------------------------------- bytes
 
 
