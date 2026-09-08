@@ -9,9 +9,9 @@ that mimics the real reader's wrapper shape:
 
     {archive, card, case_mode, codec, flags, manifest, seal, shards, sizes, version}
 
-validate.py reads `.card` (the Card 1.0 object) and `.seal` (sealed-ness) from
-it, so the card-compare path runs with no real reader present. The real reader
-is configured in CI via CARTRIDGE_BIN.
+validate.py reads `.card` (the Card 1.0 object) and `.seal.status` (the seal
+state string) from it, so the card-compare path runs with no real reader
+present. The real reader is configured in CI via CARTRIDGE_BIN.
 """
 
 import json
@@ -30,7 +30,7 @@ print(json.dumps({
     "codec": "default",
     "flags": [],
     "manifest": {"files": 1},
-    "seal": True,
+    "seal": {"status": "legacy"},
     "shards": 1,
     "sizes": {"orig_bytes": 5589889, "total_bytes": 2048},
     "version": 1,

@@ -321,15 +321,33 @@ def test_card_skip_no_reader(validate, pass_listing, cart_file):
     assert validate.check_card(ctx)[0].status == "skip"
 
 
-def test_card_unsealed_fails(validate, pass_listing, card, cart_file, monkeypatch):
-    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": False})
+def test_card_seal_status_legacy_passes(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "legacy"}})
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    assert validate.check_card(ctx)[0].status == "pass"
+
+
+def test_card_seal_status_valid_passes(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "valid"}})
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    assert validate.check_card(ctx)[0].status == "pass"
+
+
+def test_card_seal_status_missing_fails(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "missing"}})
     ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
     verdict = validate.check_card(ctx)[0]
     assert verdict.status == "fail"
-    assert "sealed" in verdict.reason
+    assert "missing" in verdict.reason
 
 
-def test_card_missing_seal_field_fails(validate, pass_listing, card, cart_file, monkeypatch):
+def test_card_seal_status_unsealed_fails(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "unsealed"}})
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    assert validate.check_card(ctx)[0].status == "fail"
+
+
+def test_card_absent_seal_fails(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card})
     ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
     verdict = validate.check_card(ctx)[0]
