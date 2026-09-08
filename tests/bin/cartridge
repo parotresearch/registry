@@ -1,0 +1,21 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""A stub `cartridge` reader for offline tests.
+
+It ignores the file it is handed and prints a canned `info --json` document
+whose `card` is the fixture card, so validate.py's card-compare path runs with
+no real reader present. The real reader is configured in CI via CARTRIDGE_BIN.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+card = json.loads((Path(__file__).resolve().parent.parent / "fixtures" / "card.json").read_text())
+# Args look like: info --json <file>. We only implement `info`.
+if "info" not in sys.argv:
+    sys.stderr.write("stub cartridge: only `info --json <file>` is implemented\n")
+    sys.exit(2)
+print(json.dumps({"sealed": True, "card": card}))

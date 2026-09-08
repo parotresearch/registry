@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "name": "registry/shakespeare",
+  "title": "The Complete Works of William Shakespeare",
+  "version": "2026.09",
+  "publisher": "Parot",
+  "license": "public-domain",
+  "source_url": "https://www.gutenberg.org/ebooks/100",
+  "warranty": true,
+  "description": "Every play and poem, one record per work.",
+  "size_bytes": 2048,
+  "sha256": "5749916b7725e995e3e42fb88639af4fda3b16578dbb3e5851420b1043a2da66",
+  "filename": "shakespeare.cart",
+  "urls": [
+    "https://huggingface.co/datasets/parotresearch/shakespeare/resolve/main/shakespeare.cart"
+  ],
+  "card": {
+    "$schema": "https://parot.app/schemas/card/1.0.json",
+    "card_version": "1.0",
+    "identity": {
+      "id": "sha256:5749916b7725e995e3e42fb88639af4fda3b16578dbb3e5851420b1043a2da66",
+      "name": "registry/shakespeare",
+      "title": "The Complete Works of William Shakespeare",
+      "version": "2026.09",
+      "description": "Every play and poem, one record per work.",
+      "publisher": "Parot",
+      "license": {
+        "spdx": "public-domain",
+        "url": null
+      },
+      "source_license": {
+        "spdx": "public-domain",
+        "url": null
+      },
+      "category": "culture",
+      "tags": [
+        "literature",
+        "public-domain"
+      ],
+      "homepage": null,
+      "supersedes": null
+    },
+    "provenance": {
+      "builder": {
+        "tool": "cartridge",
+        "version": "0.9.0",
+        "format": 1
+      },
+      "invocation": {
+        "argv": [
+          "cartridge",
+          "press",
+          "shakespeare.txt"
+        ],
+        "cwd": "/data"
+      },
+      "recipe": null,
+      "environment": {
+        "os": "linux",
+        "arch": "x86_64"
+      },
+      "started_at": null,
+      "finished_at": null,
+      "duration_s": null,
+      "source": {
+        "description": "Project Gutenberg plain-text edition.",
+        "url": "https://www.gutenberg.org/ebooks/100",
+        "retrieved_at": null,
+        "files": 1,
+        "bytes": 5589889,
+        "tree_digest": null,
+        "materials": "embedded"
+      }
+    },
+    "shape": {
+      "kind": "files",
+      "segment": "line",
+      "input": {
+        "format": "text-files",
+        "has_header": null,
+        "log_format": null,
+        "log_pattern": null
+      },
+      "count": {
+        "files": 1,
+        "rows": null
+      },
+      "bytes": {
+        "source": 5589889,
+        "cart": 2048,
+        "ratio": 2729.0
+      },
+      "languages": [
+        "en"
+      ],
+      "columns": []
+    },
+    "fidelity": {
+      "store_source": true,
+      "case_insensitive": false,
+      "case_preserved": true,
+      "normalize_whitespace": false,
+      "encoding": {
+        "utf8": true,
+        "non_utf8_bytes": 0,
+        "line_endings": "lf"
+      },
+      "binaries": {
+        "indexed": false,
+        "skipped": 0
+      },
+      "skipped": {
+        "excluded_by_glob": 0,
+        "symlinks": 0,
+        "parse_errors": 0
+      },
+      "parse_error_policy": "fail",
+      "dedup": {
+        "mode": "none",
+        "removed": 0
+      },
+      "verified": {
+        "round_trip": true
+      }
+    },
+    "index": {
+      "locate_level": 2,
+      "doc_index": false,
+      "shards": 1,
+      "max_shard_bytes": 268435456
+    },
+    "citation": {
+      "column": "path",
+      "format": null,
+      "example": "shakespeare.txt:1",
+      "stable": true,
+      "monotone": true
+    },
+    "access": {
+      "encrypted": false,
+      "license_key_required": false,
+      "integrity": {
+        "whole_file_crc32": true,
+        "per_region_crc32": true
+      }
+    },
+    "provides": {
+      "format": "cart/1",
+      "reader": ">=0.8",
+      "profiles": [],
+      "features": [
+        "grep",
+        "count",
+        "cite",
+        "extract"
+      ],
+      "roles": {},
+      "fidelity": {
+        "verbatim": true,
+        "complete": true
+      },
+      "citation_stable": true,
+      "max_shard_bytes": 268435456,
+      "license_key_required": false
+    }
+  },
+  "published_at": "2026-09-08T00:00:00Z",
+  "homepage": "https://cartridge.app/marketplace/parotresearch/shakespeare"
+}
