@@ -124,9 +124,13 @@ passed. The run fails if any check fails.
 The card comparison uses `cartridge info FILE --json`. That command prints a
 wrapper object — `{archive, card, case_mode, codec, flags, manifest, seal,
 shards, sizes, version}` — and the check reads two fields from it: `.card` (the
-Card 1.0 object, which must equal the listing's `card`) and `.seal` (which must
-be truthy — the file must be sealed). The same Card 1.0 object can also be
-printed bare with `cartridge card show FILE --json`.
+Card 1.0 object, which must equal the listing's `card`) and `.seal.status` (a
+string). A licensed press writes `valid`, or `legacy` until the press service
+ships; both are accepted. `missing`, `unsealed`, `invalid`, or an absent seal
+are refused with the status named. A dev / no-licence press is caught upstream:
+the release reader in the sandbox refuses to open it, so `info` exits non-zero.
+The same Card 1.0 object can also be printed bare with
+`cartridge card show FILE --json`.
 
 The reader runs sandboxed: `docker run --rm --network none --memory 4g
 --pids-limit 256` with the file mounted read-only and a hard `timeout`. The

@@ -370,12 +370,18 @@ def check_card(ctx: Ctx) -> list[Verdict]:
     if local is None:
         return _skip("card-check", "no cartridge file available to read")
     # `cartridge info FILE --json` prints a wrapper object; the card lives in
-    # its `.card` field and its sealed-ness in `.seal`.
+    # its `.card` field and the seal state in `.seal.status` (a string). A
+    # licensed press writes `valid` (or `legacy` until the press service ships);
+    # `missing`, `unsealed`, `invalid`, or an absent seal are refused. A
+    # dev/no-licence press is caught upstream: the release reader refuses to
+    # open it, so `info` exits non-zero and run_reader raises.
     info = run_reader(ctx.reader_cmd_prefix, local)
-    if "seal" not in info:
-        return _fail("card-check", "reader info JSON has no `seal` field")
-    if not info["seal"]:
-        return _fail("card-check", "reader reports the file is not sealed (`seal` is falsy)")
+    seal = info.get("seal")
+    if not isinstance(seal, dict) or not isinstance(seal.get("status"), str):
+        return _fail("card-check", "reader info JSON has no `.seal.status`")
+    status = seal["status"]
+    if status not in ("valid", "legacy"):
+        return _fail("card-check", f"file seal status is '{status}' (accepted: valid, legacy)")
     file_card = info.get("card")
     if file_card is None:
         return _fail("card-check", "reader info JSON has no `card` field")
