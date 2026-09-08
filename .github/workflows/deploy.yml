@@ -1,0 +1,101 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+# Never run two deploys of the site at once.
+concurrency:
+  group: deploy-registry
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # to commit a regenerated r/index.json back
+  pages: write      # to deploy to GitHub Pages
+  id-token: write   # for the Pages deployment
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      site: _site
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Regenerate r/index.json
+        run: uv run scripts/build-index.py
+
+      - name: Commit the index back if it changed
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if git diff --quiet -- r/index.json; then
+            echo "index.json already current; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add r/index.json
+          git commit -m "chore: regenerate r/index.json"
+          git push origin HEAD:main
+
+      - name: Assemble the site tree (r/ under an r/ prefix)
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          cp -r r _site/r
+          cp _headers _site/_headers
+          cat > _site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8">
+          <title>Cartridge registry</title>
+          <h1>Cartridge registry</h1>
+          <p>The listing index is at <a href="r/index.json">r/index.json</a>.</p>
+          HTML
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Upload the site for the Cloudflare job
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _site
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Skipped (grey, never green) until the user sets CLOUDFLARE_API_TOKEN /
+  # CLOUDFLARE_ACCOUNT_ID secrets and flips the CLOUDFLARE_DEPLOY variable.
+  deploy-cloudflare:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
+    steps:
+      - name: Fetch the assembled site
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: _site
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy _site --project-name=cartridge-registry --branch=main

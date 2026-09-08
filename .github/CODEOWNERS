@@ -1,0 +1,8 @@
+# The registry/* namespace and everything that governs the registry belong to
+# the maintainer. A pull request that touches these paths needs a code-owner
+# review before it can be merged.
+r/*          @vmasrani
+r/**         @vmasrani
+schema/**    @vmasrani
+scripts/**   @vmasrani
+.github/**   @vmasrani

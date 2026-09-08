@@ -1,0 +1,147 @@
+name: validate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "r/**"
+      - "schema/**"
+      - "scripts/**"
+      - ".github/workflows/validate.yml"
+
+# One PR at a time per branch; a new push cancels the older run.
+concurrency:
+  group: validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Regenerate index and verify it is current
+        run: uv run scripts/build-index.py --check
+
+      - name: Collect changed listing documents
+        id: changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          git fetch --quiet origin "$BASE_REF"
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'r/**/*.json' \
+              | grep -v '^r/index.json$' || true
+          )
+          printf 'Changed listings: %s\n' "${files[*]:-<none>}"
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${files[@]:-}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate each changed listing
+        if: steps.changed.outputs.files != ''
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          #!/usr/bin/env bash
+          set -uo pipefail
+          # The PR body, for the warranty checkbox.
+          cat > /tmp/pr_body.md <<'PR_BODY_EOF'
+          ${{ github.event.pull_request.body }}
+          PR_BODY_EOF
+
+          overall=0
+          rm -f /tmp/comment_all.md
+          while IFS= read -r listing; do
+            [ -z "$listing" ] && continue
+            echo "::group::validate ${listing}"
+            base_args=()
+            if git cat-file -e "origin/${BASE_REF}:${listing}" 2>/dev/null; then
+              git show "origin/${BASE_REF}:${listing}" > /tmp/base_listing.json
+              base_args=(--base-file /tmp/base_listing.json)
+            fi
+            if uv run scripts/validate.py "$listing" \
+                --pr-body /tmp/pr_body.md \
+                "${base_args[@]}" \
+                --comment-out /tmp/comment_one.md; then
+              echo "ok: ${listing}"
+            else
+              overall=1
+            fi
+            cat /tmp/comment_one.md >> /tmp/comment_all.md
+            echo -e "\n---\n" >> /tmp/comment_all.md
+            echo "::endgroup::"
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          if [ -s /tmp/comment_all.md ]; then
+            gh pr comment "${PR_NUMBER}" --body-file /tmp/comment_all.md
+          fi
+          exit "$overall"
+
+  # A visibly-separate check: the reader-backed card comparison. It is SKIPPED
+  # (shown grey in the checks list, never green) until the reader is configured
+  # via the CARTRIDGE_READER_URL / CARTRIDGE_READER_SHA256 repository variables.
+  card-check:
+    runs-on: ubuntu-latest
+    if: ${{ vars.CARTRIDGE_READER_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Download and verify the reader
+        env:
+          CARTRIDGE_READER_URL: ${{ vars.CARTRIDGE_READER_URL }}
+          CARTRIDGE_READER_SHA256: ${{ vars.CARTRIDGE_READER_SHA256 }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl -fsSL "$CARTRIDGE_READER_URL" -o /tmp/cartridge
+          echo "${CARTRIDGE_READER_SHA256}  /tmp/cartridge" | sha256sum -c -
+          chmod +x /tmp/cartridge
+
+      - name: Compare each changed listing's card against its file
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          CARTRIDGE_BIN: /tmp/cartridge
+        run: |
+          #!/usr/bin/env bash
+          set -uo pipefail
+          git fetch --quiet origin "$BASE_REF"
+          cat > /tmp/pr_body.md <<'PR_BODY_EOF'
+          ${{ github.event.pull_request.body }}
+          PR_BODY_EOF
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'r/**/*.json' \
+              | grep -v '^r/index.json$' || true
+          )
+          overall=0
+          for listing in "${files[@]:-}"; do
+            [ -z "$listing" ] && continue
+            uv run scripts/validate.py "$listing" --pr-body /tmp/pr_body.md || overall=1
+          done
+          exit "$overall"
