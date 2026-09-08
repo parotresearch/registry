@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "name": "registry/throwaway-badlicense",
+    "title": "Throwaway (bad license)",
+    "size_bytes": 2048,
+    "version": "2026.09",
+    "license": "GPL-3.0-only"
+  }
+]
