@@ -42,8 +42,8 @@ jobs:
           set -euo pipefail
           git fetch --quiet origin "$BASE_REF"
           mapfile -t files < <(
-            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'r/**/*.json' \
-              | grep -v '^r/index.json$' || true
+            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- r \
+              | grep -E '\.json$' | grep -v '^r/index.json$' || true
           )
           printf 'Changed listings: %s\n' "${files[*]:-<none>}"
           {
@@ -136,8 +136,8 @@ jobs:
           ${{ github.event.pull_request.body }}
           PR_BODY_EOF
           mapfile -t files < <(
-            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'r/**/*.json' \
-              | grep -v '^r/index.json$' || true
+            git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- r \
+              | grep -E '\.json$' | grep -v '^r/index.json$' || true
           )
           overall=0
           for listing in "${files[@]:-}"; do
