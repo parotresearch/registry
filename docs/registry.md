@@ -116,10 +116,17 @@ passed. The run fails if any check fails.
 | `url` | Every URL is `https://`; no host is `cartridge.app` or a subdomain; `size_bytes` is within the 50 GiB cap. |
 | `url-reachable` | Each URL answers a HEAD (following redirects) and its `Content-Length` equals `size_bytes`. *(network)* |
 | `bytes` | The downloaded file's SHA256 equals `sha256`. *(needs the file)* |
-| `card-check` | The reader runs on the file in a sandbox, exits 0, reports the file **sealed**, and the card inside the file equals the listing's `card` field (the first differing path is reported). *(needs a configured reader; a separate, visibly-skipped job until then)* |
+| `card-check` | The reader runs `cartridge info FILE --json` on the file in a sandbox, exits 0, the file is **sealed**, and the card inside the file equals the listing's `card` field (the first differing path is reported). *(needs a configured reader; a separate, visibly-skipped job until then)* |
 | `license` | `license` is on the allowlist, else it fails with a pointer to POLICY.md. |
 | `warranty` | `warranty` is `true` **and** the PR body carries the checked warranty checkbox. |
 | `rate-limit` | The author has at most five open PRs in this repo. *(network)* |
+
+The card comparison uses `cartridge info FILE --json`. That command prints a
+wrapper object — `{archive, card, case_mode, codec, flags, manifest, seal,
+shards, sizes, version}` — and the check reads two fields from it: `.card` (the
+Card 1.0 object, which must equal the listing's `card`) and `.seal` (which must
+be truthy — the file must be sealed). The same Card 1.0 object can also be
+printed bare with `cartridge card show FILE --json`.
 
 The reader runs sandboxed: `docker run --rm --network none --memory 4g
 --pids-limit 256` with the file mounted read-only and a hard `timeout`. The

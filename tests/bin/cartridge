@@ -5,8 +5,13 @@
 """A stub `cartridge` reader for offline tests.
 
 It ignores the file it is handed and prints a canned `info --json` document
-whose `card` is the fixture card, so validate.py's card-compare path runs with
-no real reader present. The real reader is configured in CI via CARTRIDGE_BIN.
+that mimics the real reader's wrapper shape:
+
+    {archive, card, case_mode, codec, flags, manifest, seal, shards, sizes, version}
+
+validate.py reads `.card` (the Card 1.0 object) and `.seal` (sealed-ness) from
+it, so the card-compare path runs with no real reader present. The real reader
+is configured in CI via CARTRIDGE_BIN.
 """
 
 import json
@@ -18,4 +23,15 @@ card = json.loads((Path(__file__).resolve().parent.parent / "fixtures" / "card.j
 if "info" not in sys.argv:
     sys.stderr.write("stub cartridge: only `info --json <file>` is implemented\n")
     sys.exit(2)
-print(json.dumps({"sealed": True, "card": card}))
+print(json.dumps({
+    "archive": "cart",
+    "card": card,
+    "case_mode": "preserve",
+    "codec": "default",
+    "flags": [],
+    "manifest": {"files": 1},
+    "seal": True,
+    "shards": 1,
+    "sizes": {"orig_bytes": 5589889, "total_bytes": 2048},
+    "version": 1,
+}))

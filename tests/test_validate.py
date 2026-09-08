@@ -321,6 +321,22 @@ def test_card_skip_no_reader(validate, pass_listing, cart_file):
     assert validate.check_card(ctx)[0].status == "skip"
 
 
+def test_card_unsealed_fails(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": False})
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    verdict = validate.check_card(ctx)[0]
+    assert verdict.status == "fail"
+    assert "sealed" in verdict.reason
+
+
+def test_card_missing_seal_field_fails(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card})
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    verdict = validate.check_card(ctx)[0]
+    assert verdict.status == "fail"
+    assert "seal" in verdict.reason
+
+
 # --------------------------------------------------------------------------- license
 
 

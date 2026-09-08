@@ -369,12 +369,16 @@ def check_card(ctx: Ctx) -> list[Verdict]:
     local = resolve_file(ctx)
     if local is None:
         return _skip("card-check", "no cartridge file available to read")
+    # `cartridge info FILE --json` prints a wrapper object; the card lives in
+    # its `.card` field and its sealed-ness in `.seal`.
     info = run_reader(ctx.reader_cmd_prefix, local)
-    if not info.get("sealed", False):
-        return _fail("card-check", "reader reports the file is not sealed")
+    if "seal" not in info:
+        return _fail("card-check", "reader info JSON has no `seal` field")
+    if not info["seal"]:
+        return _fail("card-check", "reader reports the file is not sealed (`seal` is falsy)")
     file_card = info.get("card")
     if file_card is None:
-        return _fail("card-check", "reader returned no card")
+        return _fail("card-check", "reader info JSON has no `card` field")
     diff = first_diff(ctx.doc["card"], file_card)
     if diff is not None:
         return _fail("card-check", f"listing card differs from the file's card at {diff}")
