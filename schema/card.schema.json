@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parot.app/schemas/card/1.0.json",
+  "title": "Cartridge Card 1.0",
+  "description": "A cart declares what it contains and what it can answer. Blocks identity through access are facts about the artifact; the provides block is the handshake surface an app matches against and is derived from those facts. Every field marked (derived) states its derivation in this schema and the validator checks it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "card_version", "identity", "provenance", "shape", "fidelity", "index", "citation", "access", "provides"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://parot.app/schemas/card/1.0.json",
+      "description": "Schema identifier. Fixed for card 1.0."
+    },
+    "card_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Card spec version. Additive keys bump the minor and keep this $id path; removed or renamed keys bump the major and get a new $id."
+    },
+
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "title", "version", "category"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Content id: sha256 of the .cart file bytes, prefixed sha256:. Immutable; a re-press produces a different id."
+        },
+        "name": { "type": "string", "description": "Publisher/slug listing key, e.g. acme/rfcs." },
+        "title": { "type": "string", "description": "Human title shown on the card." },
+        "version": { "type": "string", "description": "Listing version, free semver or date. Distinct from identity.id; supersedes links the prior press." },
+        "description": { "type": "string" },
+        "publisher": { "type": "string" },
+        "license": { "$ref": "#/$defs/license", "description": "License governing the cart artifact." },
+        "source_license": { "$ref": "#/$defs/license", "description": "License of the underlying source material." },
+        "category": {
+          "type": "string",
+          "enum": ["code", "law", "medicine", "finance", "science", "culture", "chat", "logs", "docs", "other"],
+          "description": "Closed enum; drives the band color on the rendered card."
+        },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Free-form tags. The one place a free vocabulary is allowed." },
+        "homepage": { "type": ["string", "null"] },
+        "supersedes": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "identity.id of the previous press of the same listing, or null for a first press."
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["builder", "invocation", "environment", "source"],
+      "properties": {
+        "builder": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "version", "format"],
+          "properties": {
+            "tool": { "type": "string", "description": "Builder tool name. Always cartridge." },
+            "version": { "type": "string", "description": "Builder version, from the cart manifest tool_version." },
+            "format": { "type": "integer", "description": "Container format version, from info version." }
+          }
+        },
+        "invocation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argv", "cwd"],
+          "properties": {
+            "argv": { "type": "array", "items": { "type": "string" }, "description": "The exact press command. Effort-only flags (jobs, streaming, quiet, json, yes) live here alone and change no other field." },
+            "cwd": { "type": "string" }
+          }
+        },
+        "recipe": {
+          "type": ["object", "null"],
+          "description": "The structured, replayable press schema. profiles.map holds the raw-column to semantic-role mapping echoed in provides.roles. Null when no recipe was recorded."
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os", "arch"],
+          "properties": {
+            "os": { "type": "string" },
+            "arch": { "type": "string" }
+          }
+        },
+        "started_at": { "type": ["string", "null"], "description": "RFC3339 press start, or null when not recorded." },
+        "finished_at": { "type": ["string", "null"], "description": "RFC3339 press end, or null when not recorded." },
+        "duration_s": { "type": ["integer", "null"], "description": "Press wall-clock seconds, or null when not recorded." },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["files", "bytes", "tree_digest", "materials"],
+          "properties": {
+            "description": { "type": ["string", "null"] },
+            "url": { "type": ["string", "null"] },
+            "retrieved_at": { "type": ["string", "null"] },
+            "files": { "type": ["integer", "null"], "description": "Source file count, or null for a records input." },
+            "bytes": { "type": "integer", "description": "Total source bytes ingested." },
+            "tree_digest": {
+              "type": ["string", "null"],
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "description": "(derived, provisional) sha256 over the sorted lines path<TAB>sha256<NL> taken from the cart manifest file list (info/ls). A sidecar digest of the same per-file hashes the manifest carries in full."
+            },
+            "materials": {
+              "type": "string",
+              "enum": ["embedded", "referenced"],
+              "description": "embedded means the per-file hash list lives in the cart manifest; the sidecar carries only tree_digest."
+            }
+          }
+        }
+      }
+    },
+
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "segment", "input", "count", "bytes", "columns"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["files", "records"], "description": "files for a folder press, records for a csv/parquet/log press." },
+        "segment": { "type": "string", "enum": ["line", "paragraph", "file", "row"], "description": "The unit a match is reported against, from the press text-segment or the records mode." },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format"],
+          "properties": {
+            "format": { "type": "string", "enum": ["text-files", "csv", "parquet", "log"] },
+            "has_header": { "type": ["boolean", "null"], "description": "csv only; null otherwise." },
+            "log_format": { "type": ["string", "null"] },
+            "log_pattern": { "type": ["string", "null"] }
+          }
+        },
+        "count": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["files", "rows"],
+          "properties": {
+            "files": { "type": ["integer", "null"], "description": "File count for a files press, else null." },
+            "rows": { "type": ["integer", "null"], "description": "Row count for a records press, else null." }
+          }
+        },
+        "bytes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "cart", "ratio"],
+          "properties": {
+            "source": { "type": "integer", "description": "Source bytes ingested (info sizes.orig_bytes)." },
+            "cart": { "type": "integer", "description": "Cart file bytes on disk (info sizes.total_bytes)." },
+            "ratio": { "type": ["number", "null"], "description": "(derived) source / cart, rounded. Below 1 when a richly indexed records cart is larger than its source." }
+          }
+        },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "columns": {
+          "type": "array",
+          "description": "One entry per column. A column may be both stored and carry several indexes.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "type", "stored", "indexes"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string", "enum": ["string", "integer", "float", "datetime", "date", "boolean"], "description": "From the press type flag or the parquet/csv logical type." },
+              "stored": { "type": "boolean", "description": "The value is retrievable per row (store flags)." },
+              "indexes": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["text", "attribute", "distinct", "measure", "percentile", "timeline"] },
+                "description": "Which index regions cover this column. text feeds grep/rank; attribute feeds attribute-filter; distinct feeds count-distinct; measure/percentile feed aggregation; timeline feeds time-bucketed queries."
+              },
+              "cardinality": { "type": ["integer", "null"], "description": "Distinct-value count when measured, else null." },
+              "examples": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+
+    "fidelity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["store_source", "case_insensitive", "case_preserved", "normalize_whitespace", "encoding", "binaries", "skipped", "parse_error_policy", "dedup", "verified"],
+      "properties": {
+        "store_source": { "type": "boolean", "description": "True when the original text can be extracted byte-exact. --no-store makes it false. This is a capability, not the container's internal storage flag." },
+        "case_insensitive": { "type": "boolean", "description": "Search matching folds case. Set by --case-insensitive. Says nothing about whether the stored text keeps its case; see case_preserved." },
+        "case_preserved": { "type": "boolean", "description": "The recoverable text keeps the source's original case. A case-folded press that restores original case keeps this true." },
+        "normalize_whitespace": { "type": "boolean", "description": "Whitespace runs were collapsed, so matches are not byte-exact." },
+        "encoding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["utf8", "non_utf8_bytes", "line_endings"],
+          "properties": {
+            "utf8": { "type": "boolean" },
+            "non_utf8_bytes": { "type": "integer" },
+            "line_endings": { "type": "string", "enum": ["lf", "crlf", "mixed"] }
+          }
+        },
+        "binaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["indexed", "skipped"],
+          "properties": {
+            "indexed": { "type": "boolean" },
+            "skipped": { "type": ["integer", "null"], "description": "Binary files skipped, or null when not recorded by the press." }
+          }
+        },
+        "skipped": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["excluded_by_glob", "symlinks", "parse_errors"],
+          "properties": {
+            "excluded_by_glob": { "type": ["integer", "null"] },
+            "symlinks": { "type": ["integer", "null"] },
+            "parse_errors": { "type": ["integer", "null"] }
+          }
+        },
+        "parse_error_policy": { "type": "string", "enum": ["fail", "skip"] },
+        "dedup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "removed"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["none", "exact"] },
+            "removed": { "type": ["integer", "null"] }
+          }
+        },
+        "verified": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["round_trip"],
+          "properties": {
+            "round_trip": { "type": ["boolean", "null"], "description": "True/false when the press verify pass ran, null when it did not." }
+          }
+        }
+      }
+    },
+
+    "index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locate_level", "doc_index", "shards", "max_shard_bytes"],
+      "properties": {
+        "locate_level": { "type": ["integer", "null"], "minimum": 1, "maximum": 4, "description": "The press level flag, 1..4, size versus preview speed. Null when the effective level is not recoverable from the artifact." },
+        "doc_index": { "type": "boolean", "description": "A document index is present; gates the rank feature." },
+        "doc_index_mode": { "type": ["string", "null"], "enum": ["none", "count-only", "full", null], "description": "Which row-index mode the press built (#400/#568): none (no doc-index), count-only (can count matching rows per group but not list them), or full (can list them, gating the group-by feature). Additive: absent on a card written before #568, which every consumer must treat as unknown, never as none." },
+        "shards": { "type": "integer", "minimum": 1 },
+        "max_shard_bytes": { "type": ["integer", "null"], "description": "The shard-size cap a reader must be able to load, from the press shard-size. Null when the effective cap is not recorded in the artifact." },
+        "compression_effort": { "type": ["integer", "null"], "minimum": 0, "maximum": 9, "description": "The press effort flag, or null when not recorded." },
+        "speed_tier": { "type": ["string", "null"], "enum": ["normal", "mad-max", null], "description": "The press speed tier (#554): normal (the index is compressed on disk), or mad-max (the index is stored uncompressed and memory-mapped, so the file is about as large as the input but serves queries straight from memory). Additive: absent on a card written before #554 and on every normal press, which every consumer must treat as the normal tier." }
+      }
+    },
+
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column", "stable", "monotone"],
+      "properties": {
+        "column": { "type": ["string", "null"], "description": "The column (or path, for a files cart) that labels each match. Null when there is no citation." },
+        "format": { "type": ["string", "null"] },
+        "example": { "type": ["string", "null"] },
+        "stable": { "type": "boolean", "description": "The citation is source-derived and survives a re-press, so bookmarks and annotations stay valid." },
+        "monotone": { "type": "boolean", "description": "Citations are non-increasing in press order (the assert-cite-monotone press held)." }
+      }
+    },
+
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column", "designated", "range", "timezone", "resolution"],
+      "properties": {
+        "column": { "type": "string" },
+        "designated": { "type": "boolean" },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": ["string", "null"] },
+            "max": { "type": ["string", "null"] }
+          }
+        },
+        "timezone": { "type": "string" },
+        "resolution": { "type": "string", "enum": ["second", "minute", "hour", "day"] }
+      }
+    },
+
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encrypted", "license_key_required", "integrity"],
+      "properties": {
+        "encrypted": { "type": "boolean" },
+        "license_key_required": { "type": "boolean" },
+        "integrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["whole_file_crc32", "per_region_crc32"],
+          "properties": {
+            "whole_file_crc32": { "type": "boolean" },
+            "per_region_crc32": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "provides": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The handshake surface. Every field is derived from the blocks above.",
+      "required": ["format", "reader", "profiles", "features", "roles", "fidelity", "citation_stable", "max_shard_bytes", "license_key_required"],
+      "properties": {
+        "format": { "type": "string", "pattern": "^cart/[0-9]+$", "description": "Container format, cart/<major>." },
+        "reader": { "type": "string", "description": "Reader version floor, a semver range like >=0.8, from the builder line." },
+        "profiles": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z-]+/[0-9]+$" },
+          "description": "Profiles this cart conforms to, each name/<major>."
+        },
+        "features": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["grep", "count", "rank", "group-by", "cite", "extract", "attribute-filter", "distinct", "measure", "percentile", "timeline"] },
+          "description": "(derived) Consistent with the blocks above: rank from index.doc_index; group-by from index.doc_index_mode == full (the row-listing index #400 needs to list, not just count, matching rows per group); extract from fidelity.store_source; cite from a non-null citation.column; attribute-filter/distinct/measure/percentile/timeline from the matching shape.columns[].indexes. grep and count are always present on an indexed cart."
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "description": "(derived) Semantic role names an app may read, echoed from provenance.recipe.profiles.map. Keyed by role category (text, cite, timestamp, attribute, measure); values are the semantic names."
+        },
+        "fidelity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verbatim", "complete"],
+          "properties": {
+            "verbatim": { "type": ["boolean", "null"], "description": "(derived) fidelity.store_source AND fidelity.case_preserved AND NOT fidelity.normalize_whitespace." },
+            "complete": { "type": ["boolean", "null"], "description": "(derived) every fidelity.skipped count is 0 AND fidelity.dedup.removed is 0 AND fidelity.binaries.skipped is 0. Null when any of those counts is null." }
+          }
+        },
+        "citation_stable": { "type": ["boolean", "null"], "description": "(derived) equals citation.stable." },
+        "max_shard_bytes": { "type": ["integer", "null"], "description": "(derived) equals index.max_shard_bytes." },
+        "license_key_required": { "type": "boolean", "description": "(derived) equals access.license_key_required." }
+      }
+    },
+
+    "usage": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Human-authored, Model-Card style. The one object where extra keys are allowed.",
+      "properties": {
+        "intended_use": { "type": "string" },
+        "not_for": { "type": "string" },
+        "caveats": { "type": "string" },
+        "canonical_queries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tier": { "type": ["integer", "string"] },
+              "shape": { "type": "string" },
+              "command": { "type": "string" }
+            }
+          }
+        },
+        "notes_markdown": { "type": "string" }
+      }
+    },
+
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query_p50_ms": { "type": ["number", "null"] },
+        "verified": { "type": ["boolean", "null"] }
+      }
+    }
+  },
+
+  "$defs": {
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spdx": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

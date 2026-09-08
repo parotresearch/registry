@@ -1,0 +1,23 @@
+[project]
+name = "cartridge-registry"
+version = "0.1.0"
+description = "The Cartridge registry: a directory of static JSON listing documents served at https://cartridge.app/r/."
+requires-python = ">=3.11"
+dependencies = [
+    "jsonschema>=4.21",
+    "referencing>=0.34",
+    "requests>=2.31",
+    "typer>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.uv]
+package = false

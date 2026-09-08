@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cartridge.app/schemas/listing/1.json",
+  "title": "Cartridge Registry Listing 1",
+  "description": "One listing document, served at https://cartridge.app/r/<name>.json. It never hosts cartridge bytes; it points at where they live and records what they are.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "title",
+    "version",
+    "publisher",
+    "license",
+    "source_url",
+    "warranty",
+    "size_bytes",
+    "sha256",
+    "filename",
+    "urls",
+    "card",
+    "published_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "Listing document version. Fixed at 1."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+      "description": "Listing key, either registry/<slug> (file r/<slug>.json) or <org-slug>/<slug> (file r/<org-slug>/<slug>.json). Each slug is [a-z0-9-], 1-64 chars, no leading or trailing hyphen."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human title shown on the listing."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)*$",
+      "description": "Listing version, dotted numeric (e.g. 2026.09). An existing name may only change when this increases."
+    },
+    "publisher": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who published this listing."
+    },
+    "license": {
+      "type": "string",
+      "enum": [
+        "CC0-1.0",
+        "CC-BY-4.0",
+        "CC-BY-SA-4.0",
+        "ODbL-1.0",
+        "PDDL-1.0",
+        "MIT",
+        "Apache-2.0",
+        "public-domain"
+      ],
+      "description": "SPDX id (or public-domain) from the registry allowlist. Anything else is refused; see POLICY.md."
+    },
+    "source_url": {
+      "type": "string",
+      "pattern": "^https://",
+      "description": "Where the underlying source material came from."
+    },
+    "warranty": {
+      "type": "boolean",
+      "description": "The publisher asserts the right to distribute this content in this form. Must be true, and the PR body must carry the checked warranty checkbox."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional. One or two plain sentences about what the cartridge contains."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 53687091200,
+      "description": "Size of the cartridge file in bytes. Hard cap 50 GiB."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex SHA256 of the cartridge file bytes."
+    },
+    "filename": {
+      "type": "string",
+      "pattern": "^[^/\\\\]+$",
+      "minLength": 1,
+      "description": "The cartridge file name. Exactly one path component: no slashes."
+    },
+    "urls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^https://"
+      },
+      "description": "Where the bytes live, https only, mirrors tried in order. No host may be cartridge.app or a subdomain of it."
+    },
+    "card": {
+      "$ref": "https://parot.app/schemas/card/1.0.json",
+      "description": "The full Card 1.0 object the presser embeds in the cartridge, copied verbatim."
+    },
+    "published_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+      "description": "RFC3339 timestamp when this listing was published."
+    },
+    "homepage": {
+      "type": "string",
+      "pattern": "^https://",
+      "description": "Optional. A page describing the cartridge."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+uv.lock
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# Local downloads made by validate.py's byte check
+.cartridge-download/
