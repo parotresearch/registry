@@ -74,8 +74,9 @@ repeated here verbatim:
 > text. If someone claims otherwise, the listing comes down while it is
 > resolved, and the DMCA agent named at cartridge.app/legal handles the notice.
 
-Both the listing document (`warranty: true`) and the checked checkbox in the
-pull-request body are required. A listing without both is refused.
+Both the listing document (`warranty: true`) and a checked pull-request
+checkbox containing this complete text exactly as written are required. A
+shortened or paraphrased warranty, or a listing without both, is refused.
 
 ## Attribution
 
