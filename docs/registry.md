@@ -149,14 +149,18 @@ fails loudly.
 On every push to `main`:
 
 1. `r/index.json` is regenerated and committed back if it changed.
-2. The `r/` tree is published to **GitHub Pages** (build type: workflow),
-   immediately live at `https://parotresearch.github.io/registry/r/`.
-3. Optionally the same tree is published to **Cloudflare**, routed at
-   `cartridge.app/r/*`. The `_headers` file sets
-   `Content-Type: application/json` for `/r/*` and
-   `Cache-Control: public, max-age=31536000, immutable` for every listing,
-   except `index.json` which gets `max-age=300`. This job is skipped until the
-   Cloudflare secrets and the `CLOUDFLARE_DEPLOY` variable are set.
+2. The exact assembled static tree is published to **GitHub Pages** (build
+   type: workflow) as a mirror, immediately live at
+   `https://parotresearch.github.io/registry/r/`.
+3. Optionally that same tree is deployed as the `cartridge-registry`
+   **Cloudflare Workers static-assets** service on the path-specific Workers
+   Route `cartridge.app/r/*`. That route takes precedence over the existing
+   website's Pages custom domain only for `/r/*`; every other website path
+   stays unchanged. The `_headers` file sets `Content-Type: application/json`
+   for `/r/*` and `Cache-Control: public, max-age=31536000, immutable` for
+   every listing, except `index.json` which gets `max-age=300`. This job is
+   skipped until the Cloudflare secrets and the `CLOUDFLARE_DEPLOY` variable
+   are set.
 
 Because a merge is the deploy and the site is generated from this repository,
 delisting is just reverting a pull request and letting the next deploy run.

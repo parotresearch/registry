@@ -102,12 +102,16 @@ uv run pytest
 When a human merge pushes to `main`, `deploy.yml` is configured to:
 
 1. Regenerate `r/index.json` and commit it back if it changed.
-2. Publish the `r/` tree to the repository's GitHub Pages environment.
-3. Optionally publish the same tree to **Cloudflare**, routed at
+2. Publish the exact assembled static tree to the repository's GitHub Pages
+   environment as a mirror.
+3. Optionally deploy that same tree as the `cartridge-registry` **Cloudflare
+   Workers static-assets** service on the path-specific Workers Route
    `cartridge.app/r/*`, with `Content-Type: application/json` and long-lived
-   caching for every listing except `index.json`. This job is **skipped** until
-   the user sets the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets
-   and flips the `CLOUDFLARE_DEPLOY` repository variable to `true`.
+   caching for every listing except `index.json`. The route takes precedence
+   over the existing website's Pages custom domain only for `/r/*`; every other
+   website path stays unchanged. This job is **skipped** until the user sets the
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets and flips the
+   `CLOUDFLARE_DEPLOY` repository variable to `true`.
 
 The reader-backed card check is skipped only while every reader setting is
 absent. Once any reader setting is present, CI obtains the configured (or
