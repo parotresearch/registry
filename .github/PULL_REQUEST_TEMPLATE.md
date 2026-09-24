@@ -16,6 +16,7 @@
 - [ ] I have the right to distribute this content in this form. A cartridge reproduces its source byte for byte, so listing it is redistributing the text. If someone claims otherwise, the listing comes down while it is resolved, and the DMCA agent named at cartridge.app/legal handles the notice.
 
 <!--
-  Check the box above by putting an x between the brackets: [x]
-  Leaving it unchecked will fail the `warranty` validation check.
+  Check the box above by putting an x between the brackets: [x].
+  The complete warranty sentence is required exactly as written; shortened or
+  paraphrased text fails the warranty validation check.
 -->

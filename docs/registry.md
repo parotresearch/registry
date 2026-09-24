@@ -45,7 +45,7 @@ Card 1.0 object the presser embeds in every cartridge.
 | `publisher` | yes | string | Who published the listing. |
 | `license` | yes | string | SPDX id (or `public-domain`) from the allowlist in POLICY.md. |
 | `source_url` | yes | string | `https://` — where the underlying material came from. |
-| `warranty` | yes | boolean | Must be `true`; the PR body must also carry the checked warranty checkbox. |
+| `warranty` | yes | boolean | Must be `true`; the PR body must also carry the checked, complete rights warranty exactly as written in POLICY.md. |
 | `description` | no | string | One or two plain sentences about the contents. |
 | `size_bytes` | yes | integer | Size of the cartridge file, `1 …` up to the 50 GiB cap. |
 | `sha256` | yes | string | Lowercase hex SHA256 of the cartridge file bytes. |
@@ -104,9 +104,10 @@ on every pull request, so a listing PR must also commit the regenerated index.
 ## CI checks
 
 Every check is reported by name with `pass` / `fail` / `skip` and an exact
-reason. A check that cannot run — the network is disabled, or no reader is
-configured — is reported as **skipped**, visibly and distinctly, never as
-passed. The run fails if any check fails.
+reason. A check that cannot run because the network is disabled is reported as
+**skipped**, visibly and distinctly, never as passed. A reader configuration
+that is present but incomplete fails the PR instead of skipping or running the
+reader directly.
 
 | check | what it verifies |
 | --- | --- |
@@ -116,9 +117,9 @@ passed. The run fails if any check fails.
 | `url` | Every URL is `https://`; no host is `cartridge.app` or a subdomain; `size_bytes` is within the 50 GiB cap. |
 | `url-reachable` | Each URL answers a HEAD (following redirects) and its `Content-Length` equals `size_bytes`. *(network)* |
 | `bytes` | The downloaded file's SHA256 equals `sha256`. *(needs the file)* |
-| `card-check` | The reader runs `cartridge info FILE --json` on the file in a sandbox, exits 0, the file is **sealed**, and the card inside the file equals the listing's `card` field (the first differing path is reported). *(needs a configured reader; a separate, visibly-skipped job until then)* |
+| `card-check` | When a reader is configured, it is required: the reader runs in a no-network, resource-limited container, exits 0, the file is **sealed**, and the card inside the file equals the listing's `card` field (the first differing path is reported). Without reader configuration, it is visibly skipped. |
 | `license` | `license` is on the allowlist, else it fails with a pointer to POLICY.md. |
-| `warranty` | `warranty` is `true` **and** the PR body carries the checked warranty checkbox. |
+| `warranty` | `warranty` is `true` **and** the PR body carries the checked, complete rights warranty exactly as written in POLICY.md. |
 | `rate-limit` | The author has at most five open PRs in this repo. *(network)* |
 
 The card comparison uses `cartridge info FILE --json`. That command prints a
@@ -127,30 +128,39 @@ shards, sizes, version}` — and the check reads two fields from it: `.card` (th
 Card 1.0 object, which must equal the listing's `card`) and `.seal.status` (a
 string). A licensed press writes `valid`, or `legacy` until the press service
 ships; both are accepted. `missing`, `unsealed`, `invalid`, or an absent seal
-are refused with the status named. A dev / no-licence press is caught upstream:
-the release reader in the sandbox refuses to open it, so `info` exits non-zero.
+are refused with the status named. Reader compatibility and an accepted seal
+status do not identify how a file was pressed; the policy, card, and seal gates
+enforce the advertised publication contract.
 The same Card 1.0 object can also be printed bare with
 `cartridge card show FILE --json`.
 
-The reader runs sandboxed: `docker run --rm --network none --memory 4g
---pids-limit 256` with the file mounted read-only and a hard `timeout`. The
-reader binary is fetched from `CARTRIDGE_READER_URL` and checked against
-`CARTRIDGE_READER_SHA256`; locally, set `CARTRIDGE_BIN` to a reader on your
-`PATH`.
+The reader is never executed directly. It runs through `timeout --kill-after=5s
+120s docker run --rm --network none --memory 4g --pids-limit 256 --read-only`,
+with the reader and file mounted read-only. The workflow defaults
+`CARTRIDGE_READER_URL` to the supported
+`https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz` release
+archive; it may be overridden with another compatible gzip archive. Its
+`CARTRIDGE_READER_SHA256` value must hash the downloaded gzip bytes before
+unpacking. CI also requires `CARTRIDGE_SANDBOX_IMAGE`; a partial configuration
+fails loudly.
 
 ## Deploy path
 
 On every push to `main`:
 
 1. `r/index.json` is regenerated and committed back if it changed.
-2. The `r/` tree is published to **GitHub Pages** (build type: workflow),
-   immediately live at `https://parotresearch.github.io/registry/r/`.
-3. Optionally the same tree is published to **Cloudflare**, routed at
-   `cartridge.app/r/*`. The `_headers` file sets
-   `Content-Type: application/json` for `/r/*` and
-   `Cache-Control: public, max-age=31536000, immutable` for every listing,
-   except `index.json` which gets `max-age=300`. This job is skipped until the
-   Cloudflare secrets and the `CLOUDFLARE_DEPLOY` variable are set.
+2. The exact assembled static tree is published to **GitHub Pages** (build
+   type: workflow) as a mirror, immediately live at
+   `https://parotresearch.github.io/registry/r/`.
+3. Optionally that same tree is deployed as the `cartridge-registry`
+   **Cloudflare Workers static-assets** service on the path-specific Workers
+   Route `cartridge.app/r/*`. That route takes precedence over the existing
+   website's Pages custom domain only for `/r/*`; every other website path
+   stays unchanged. The `_headers` file sets `Content-Type: application/json`
+   for `/r/*` and `Cache-Control: public, max-age=31536000, immutable` for
+   every listing, except `index.json` which gets `max-age=300`. This job is
+   skipped until the Cloudflare secrets and the `CLOUDFLARE_DEPLOY` variable
+   are set.
 
 Because a merge is the deploy and the site is generated from this repository,
 delisting is just reverting a pull request and letting the next deploy run.

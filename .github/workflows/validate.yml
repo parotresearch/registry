@@ -7,6 +7,10 @@ on:
       - "r/**"
       - "schema/**"
       - "scripts/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "POLICY.md"
       - ".github/workflows/validate.yml"
 
 # One PR at a time per branch; a new push cancels the older run.
@@ -19,6 +23,15 @@ permissions:
   pull-requests: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Run the Python suite
+        run: uv run pytest
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -96,12 +109,14 @@ jobs:
           fi
           exit "$overall"
 
-  # A visibly-separate check: the reader-backed card comparison. It is SKIPPED
-  # (shown grey in the checks list, never green) until the reader is configured
-  # via the CARTRIDGE_READER_URL / CARTRIDGE_READER_SHA256 repository variables.
+  # A configured reader makes this comparison mandatory. Its release archive
+  # is verified before decompression; incomplete sandbox configuration fails
+  # loudly instead of allowing a direct reader execution.
   card-check:
     runs-on: ubuntu-latest
-    if: ${{ vars.CARTRIDGE_READER_URL != '' }}
+    if: ${{ vars.CARTRIDGE_READER_URL != '' || vars.CARTRIDGE_READER_SHA256 != '' || vars.CARTRIDGE_SANDBOX_IMAGE != '' }}
+    env:
+      CARTRIDGE_READER_URL: ${{ vars.CARTRIDGE_READER_URL || 'https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,15 +124,31 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Download and verify the reader
+      - name: Require complete reader sandbox configuration
         env:
-          CARTRIDGE_READER_URL: ${{ vars.CARTRIDGE_READER_URL }}
+          CARTRIDGE_READER_SHA256: ${{ vars.CARTRIDGE_READER_SHA256 }}
+          CARTRIDGE_SANDBOX_IMAGE: ${{ vars.CARTRIDGE_SANDBOX_IMAGE }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          [ -n "$CARTRIDGE_READER_SHA256" ] || {
+            echo "::error::CARTRIDGE_READER_SHA256 must be set for the reader release archive"
+            exit 1
+          }
+          [ -n "$CARTRIDGE_SANDBOX_IMAGE" ] || {
+            echo "::error::CARTRIDGE_SANDBOX_IMAGE must be set for the reader release archive"
+            exit 1
+          }
+
+      - name: Download, verify, and unpack the reader archive
+        env:
           CARTRIDGE_READER_SHA256: ${{ vars.CARTRIDGE_READER_SHA256 }}
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
-          curl -fsSL "$CARTRIDGE_READER_URL" -o /tmp/cartridge
-          echo "${CARTRIDGE_READER_SHA256}  /tmp/cartridge" | sha256sum -c -
+          curl -fsSL "$CARTRIDGE_READER_URL" -o /tmp/cartridge.gz
+          echo "${CARTRIDGE_READER_SHA256}  /tmp/cartridge.gz" | sha256sum -c -
+          gunzip --stdout /tmp/cartridge.gz > /tmp/cartridge
           chmod +x /tmp/cartridge
 
       - name: Compare each changed listing's card against its file
@@ -128,6 +159,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           BASE_REF: ${{ github.base_ref }}
           CARTRIDGE_BIN: /tmp/cartridge
+          CARTRIDGE_SANDBOX_IMAGE: ${{ vars.CARTRIDGE_SANDBOX_IMAGE }}
         run: |
           #!/usr/bin/env bash
           set -uo pipefail
