@@ -19,6 +19,40 @@ PASS_DIR = FIXTURES / "pass"
 PASS_PATH = PASS_DIR / "shakespeare.json"
 STUB_READER = Path(__file__).resolve().parent / "bin" / "cartridge"
 
+WARRANTY_TEXT = (
+    "I have the right to distribute this content in this form. A cartridge "
+    "reproduces its source byte for byte, so listing it is redistributing the "
+    "text. If someone claims otherwise, the listing comes down while it is "
+    "resolved, and the DMCA agent named at cartridge.app/legal handles the notice."
+)
+
+
+def sandboxed_reader_prefix():
+    return [
+        "timeout",
+        "--kill-after=5s",
+        "120s",
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--memory",
+        "4g",
+        "--pids-limit",
+        "256",
+        "--read-only",
+        "--volume",
+        "/reader:/reader:ro",
+        "--volume",
+        "{file}:/cart:ro",
+        "reader-image",
+        "/reader",
+        "info",
+        "--json",
+        "/cart",
+    ]
+
 
 def make_ctx(validate, doc, **overrides):
     defaults = dict(
@@ -51,6 +85,14 @@ def status_of(verdicts, name):
 def test_schema_valid(validate, pass_listing):
     ctx = make_ctx(validate, pass_listing)
     assert validate.check_schema(ctx)[0].status == "pass"
+
+def test_schema_accepts_current_press_index_fields(validate, pass_listing):
+    doc = copy.deepcopy(pass_listing)
+    doc["card"]["index"]["filter"] = "minimizer-multi"
+    doc["card"]["index"]["shard_size"] = "auto"
+    ctx = make_ctx(validate, doc)
+    assert validate.check_schema(ctx)[0].status == "pass"
+
 
 
 def test_schema_unknown_field(validate, pass_listing):
@@ -302,15 +344,22 @@ def test_bytes_skip_no_file(validate, pass_listing):
 # --------------------------------------------------------------------------- card
 
 
-def test_card_match(validate, pass_listing, cart_file):
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=[str(STUB_READER)])
+def test_card_match(validate, pass_listing, card, cart_file, monkeypatch):
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "valid"}})
+    ctx = make_ctx(
+        validate,
+        pass_listing,
+        local_file=cart_file,
+        reader_cmd_prefix=sandboxed_reader_prefix(),
+    )
     assert validate.check_card(ctx)[0].status == "pass"
 
 
-def test_card_mismatch(validate, pass_listing, cart_file):
+def test_card_mismatch(validate, pass_listing, card, cart_file, monkeypatch):
     doc = copy.deepcopy(pass_listing)
     doc["card"]["identity"]["title"] = "A Different Title"
-    ctx = make_ctx(validate, doc, local_file=cart_file, reader_cmd_prefix=[str(STUB_READER)])
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "valid"}})
+    ctx = make_ctx(validate, doc, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     verdict = validate.check_card(ctx)[0]
     assert verdict.status == "fail"
     assert "identity.title" in verdict.reason
@@ -323,19 +372,19 @@ def test_card_skip_no_reader(validate, pass_listing, cart_file):
 
 def test_card_seal_status_legacy_passes(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "legacy"}})
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     assert validate.check_card(ctx)[0].status == "pass"
 
 
 def test_card_seal_status_valid_passes(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "valid"}})
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     assert validate.check_card(ctx)[0].status == "pass"
 
 
 def test_card_seal_status_missing_fails(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "missing"}})
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     verdict = validate.check_card(ctx)[0]
     assert verdict.status == "fail"
     assert "missing" in verdict.reason
@@ -343,16 +392,39 @@ def test_card_seal_status_missing_fails(validate, pass_listing, card, cart_file,
 
 def test_card_seal_status_unsealed_fails(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "unsealed"}})
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     assert validate.check_card(ctx)[0].status == "fail"
 
 
 def test_card_absent_seal_fails(validate, pass_listing, card, cart_file, monkeypatch):
     monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card})
-    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=["x"])
+    ctx = make_ctx(validate, pass_listing, local_file=cart_file, reader_cmd_prefix=sandboxed_reader_prefix())
     verdict = validate.check_card(ctx)[0]
     assert verdict.status == "fail"
     assert "seal" in verdict.reason
+
+
+def test_reader_rejects_unsandboxed_command(validate, cart_file):
+    with pytest.raises(RuntimeError, match="not the required"):
+        validate.run_reader([str(STUB_READER)], cart_file)
+
+
+def test_reader_prefix_requires_a_sandbox_image(validate, monkeypatch):
+    monkeypatch.setenv("CARTRIDGE_BIN", str(STUB_READER))
+    monkeypatch.delenv("CARTRIDGE_SANDBOX_IMAGE", raising=False)
+    with pytest.raises(RuntimeError, match="refusing to run"):
+        validate.reader_prefix()
+
+
+def test_reader_prefix_uses_the_required_sandbox_limits(validate, monkeypatch):
+    monkeypatch.setenv("CARTRIDGE_BIN", str(STUB_READER))
+    monkeypatch.setenv("CARTRIDGE_SANDBOX_IMAGE", "reader-image")
+    prefix = validate.reader_prefix()
+    assert prefix is not None
+    assert validate._sandboxed_reader_prefix(prefix)
+    assert "--network" in prefix and prefix[prefix.index("--network") + 1] == "none"
+    assert "--memory" in prefix and prefix[prefix.index("--memory") + 1] == "4g"
+    assert "--pids-limit" in prefix and prefix[prefix.index("--pids-limit") + 1] == "256"
 
 
 # --------------------------------------------------------------------------- license
@@ -376,24 +448,46 @@ def test_license_off_allowlist(validate, pass_listing):
 
 
 def test_warranty_ok(validate, pass_listing):
-    body = "Some intro.\n- [x] I have the right to distribute this content in this form.\nmore"
+    body = f"Some intro.\n- [x] {WARRANTY_TEXT}\nmore"
     ctx = make_ctx(validate, pass_listing, pr_body=body)
+    assert validate.WARRANTY_TEXT == WARRANTY_TEXT
     assert validate.check_warranty(ctx)[0].status == "pass"
 
 
 def test_warranty_false_in_doc(validate, pass_listing):
     doc = copy.deepcopy(pass_listing)
     doc["warranty"] = False
-    ctx = make_ctx(validate, doc, pr_body="- [x] I have the right to distribute this content in this form.")
+    ctx = make_ctx(validate, doc, pr_body=f"- [x] {WARRANTY_TEXT}")
     assert validate.check_warranty(ctx)[0].status == "fail"
 
 
 def test_warranty_checkbox_unchecked(validate, pass_listing):
-    body = "Some intro.\n- [ ] I have the right to distribute this content in this form.\n"
+    body = f"Some intro.\n- [ ] {WARRANTY_TEXT}\n"
     ctx = make_ctx(validate, pass_listing, pr_body=body)
     verdict = validate.check_warranty(ctx)[0]
     assert verdict.status == "fail"
     assert "checkbox" in verdict.reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "- [x] I have the right to distribute this content in this form.",
+        "- [x] I am allowed to share this cartridge and will handle any complaint.",
+    ],
+    ids=["shortened", "paraphrased"],
+)
+def test_warranty_rejects_anything_except_the_full_text(validate, pass_listing, body):
+    ctx = make_ctx(validate, pass_listing, pr_body=body)
+    assert validate.check_warranty(ctx)[0].status == "fail"
+
+
+def test_warranty_text_matches_policy_and_template(validate):
+    repo = Path(validate.__file__).resolve().parent.parent
+    template = (repo / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text()
+    policy = (repo / "POLICY.md").read_text().replace("\n> ", " ").replace("> ", "")
+    assert f"- [ ] {WARRANTY_TEXT}" in template
+    assert WARRANTY_TEXT in policy
 
 
 # --------------------------------------------------------------------------- rate limit
@@ -407,14 +501,15 @@ def test_rate_limit_skips_offline(validate, pass_listing):
 # --------------------------------------------------------------------------- full run
 
 
-def test_full_run_passes_offline(validate, pass_listing, cart_file):
-    body = "Intro.\n- [x] I have the right to distribute this content in this form.\n"
+def test_full_run_passes_offline(validate, pass_listing, card, cart_file, monkeypatch):
+    body = f"Intro.\n- [x] {WARRANTY_TEXT}\n"
+    monkeypatch.setattr(validate, "run_reader", lambda prefix, path: {"card": card, "seal": {"status": "valid"}})
     ctx = make_ctx(
         validate,
         pass_listing,
         pr_body=body,
         local_file=cart_file,
-        reader_cmd_prefix=[str(STUB_READER)],
+        reader_cmd_prefix=sandboxed_reader_prefix(),
     )
     verdicts = validate.run_checks(ctx)
     fails = [v for v in verdicts if v.status == "fail"]
@@ -422,5 +517,5 @@ def test_full_run_passes_offline(validate, pass_listing, cart_file):
     # The offline-only checks are visibly skipped, not passed.
     assert status_of(verdicts, "url-reachable") == "skip"
     assert status_of(verdicts, "rate-limit") == "skip"
-    # The card path really ran against the stub reader.
+    # The card path used the configured sandboxed reader adapter.
     assert status_of(verdicts, "card-check") == "pass"

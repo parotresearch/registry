@@ -16,7 +16,8 @@ STUB_READER = Path(__file__).resolve().parent / "bin" / "cartridge"
 
 def _run(args, env_extra=None):
     env = dict(os.environ)
-    env["CARTRIDGE_BIN"] = str(STUB_READER)
+    env.pop("CARTRIDGE_BIN", None)
+    env.pop("CARTRIDGE_SANDBOX_IMAGE", None)
     if env_extra:
         env.update(env_extra)
     return subprocess.run(
@@ -27,7 +28,12 @@ def _run(args, env_extra=None):
 
 def test_cli_passes_good_listing(tmp_path):
     body = tmp_path / "body.md"
-    body.write_text("Intro.\n- [x] I have the right to distribute this content in this form.\n")
+    body.write_text(
+        "Intro.\n- [x] I have the right to distribute this content in this form. "
+        "A cartridge reproduces its source byte for byte, so listing it is redistributing the "
+        "text. If someone claims otherwise, the listing comes down while it is resolved, and "
+        "the DMCA agent named at cartridge.app/legal handles the notice.\n"
+    )
     codeowners = tmp_path / "CODEOWNERS"
     codeowners.write_text("r/* @vmasrani\n")
     result = _run([
@@ -54,7 +60,12 @@ def test_cli_fails_bad_license(tmp_path):
     bad = tmp_path / "shakespeare.json"
     bad.write_text(json.dumps(doc))
     body = tmp_path / "body.md"
-    body.write_text("- [x] I have the right to distribute this content in this form.\n")
+    body.write_text(
+        "- [x] I have the right to distribute this content in this form. "
+        "A cartridge reproduces its source byte for byte, so listing it is redistributing the "
+        "text. If someone claims otherwise, the listing comes down while it is resolved, and "
+        "the DMCA agent named at cartridge.app/legal handles the notice.\n"
+    )
     codeowners = tmp_path / "CODEOWNERS"
     codeowners.write_text("r/* @vmasrani\n")
     result = _run([

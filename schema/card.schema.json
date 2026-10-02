@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://parot.app/schemas/card/1.0.json",
   "title": "Cartridge Card 1.0",
-  "description": "A cart declares what it contains and what it can answer. Blocks identity through access are facts about the artifact; the provides block is the handshake surface an app matches against and is derived from those facts. Every field marked (derived) states its derivation in this schema and the validator checks it.",
+  "description": "A cart declares what it contains and what it can answer. Blocks identity through access are facts about the artifact; the provides block is the handshake surface an app matches against. Fields marked (derived) state their derivation in this schema and the validator checks them; format, reader, profiles, and roles are stored handshake declarations written by the press.",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "card_version", "identity", "provenance", "shape", "fidelity", "index", "citation", "access", "provides"],
@@ -247,7 +247,9 @@
         "shards": { "type": "integer", "minimum": 1 },
         "max_shard_bytes": { "type": ["integer", "null"], "description": "The shard-size cap a reader must be able to load, from the press shard-size. Null when the effective cap is not recorded in the artifact." },
         "compression_effort": { "type": ["integer", "null"], "minimum": 0, "maximum": 9, "description": "The press effort flag, or null when not recorded." },
-        "speed_tier": { "type": ["string", "null"], "enum": ["normal", "mad-max", null], "description": "The press speed tier (#554): normal (the index is compressed on disk), or mad-max (the index is stored uncompressed and memory-mapped, so the file is about as large as the input but serves queries straight from memory). Additive: absent on a card written before #554 and on every normal press, which every consumer must treat as the normal tier." }
+        "speed_tier": { "type": ["string", "null"], "enum": ["normal", "mad-max", null], "description": "The press speed tier (#554): normal (the index is compressed on disk), or mad-max (the index is stored uncompressed and memory-mapped, so the file is about as large as the input but serves queries straight from memory). Additive: absent on a card written before #554 and on every normal press, which every consumer must treat as the normal tier." },
+        "filter": { "type": ["string", "null"], "enum": ["q4", "minimizer", "token", "none", "minimizer-multi", null], "description": "The per-segment presence prefilter the press built (#667). Additive: absent on a card written before #667 means unknown, never none." },
+        "shard_size": { "type": ["string", "integer", "null"], "oneOf": [{ "type": "string", "enum": ["auto", "none"] }, { "type": "integer", "minimum": 1 }, { "type": "null" }], "description": "The press shard-size knob as passed (#667), distinct from max_shard_bytes (what the press actually wrote): auto, none (one segment for the whole input), or an explicit per-segment byte cap. Additive: absent on a card written before #667 means unknown." }
       }
     },
 
@@ -307,15 +309,15 @@
     "provides": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The handshake surface. Every field is derived from the blocks above.",
+      "description": "The handshake surface. Format, reader, profiles, and roles are stored declarations; fields marked (derived) are checked against the fact blocks above.",
       "required": ["format", "reader", "profiles", "features", "roles", "fidelity", "citation_stable", "max_shard_bytes", "license_key_required"],
       "properties": {
-        "format": { "type": "string", "pattern": "^cart/[0-9]+$", "description": "Container format, cart/<major>." },
-        "reader": { "type": "string", "description": "Reader version floor, a semver range like >=0.8, from the builder line." },
+        "format": { "type": "string", "pattern": "^cart/(0|[1-9][0-9]*)$", "description": "Container format, cart/<major> with a canonical numeric major." },
+        "reader": { "type": "string", "pattern": "^>=(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){0,2}$", "description": "Stored reader version floor from the builder line: >= followed by one to three semver numeric components." },
         "profiles": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^[a-z-]+/[0-9]+$" },
-          "description": "Profiles this cart conforms to, each name/<major>."
+          "items": { "type": "string", "enum": ["text-files/1", "log-line/1", "chat-message/1", "transcript-segment/1", "document-page/1", "filing-item/1"] },
+          "description": "Stored Card 1.0 profiles this cart conforms to."
         },
         "features": {
           "type": "array",
@@ -325,7 +327,7 @@
         "roles": {
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "type": "string" } },
-          "description": "(derived) Semantic role names an app may read, echoed from provenance.recipe.profiles.map. Keyed by role category (text, cite, timestamp, attribute, measure); values are the semantic names."
+          "description": "Stored semantic role names written from the recipe profile map. Keyed by role category (text, cite, timestamp, attribute, measure); values are the semantic names."
         },
         "fidelity": {
           "type": "object",

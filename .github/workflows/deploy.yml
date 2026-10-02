@@ -88,14 +88,16 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
     steps:
+      - name: Check out the deployment config
+        uses: actions/checkout@v4
       - name: Fetch the assembled site
         uses: actions/download-artifact@v4
         with:
           name: site
           path: _site
-      - name: Publish to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy _site --project-name=cartridge-registry --branch=main
+          command: deploy --config wrangler.jsonc

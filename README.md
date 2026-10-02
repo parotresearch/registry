@@ -1,7 +1,7 @@
 # Cartridge registry
 
-A public directory of **cartridge listings**, served as static JSON at
-`https://cartridge.app/r/`.
+A public directory of **cartridge listings**, designed for deployment as static
+JSON under `https://cartridge.app/r/`.
 
 The registry is a catalogue, not a host. It never stores cartridge files
 themselves — those live on Hugging Face Hub or anywhere else the publisher puts
@@ -9,12 +9,14 @@ them. Each entry here is a small JSON document that says what a cartridge
 contains, where to download it, its size and checksum, and the license it is
 distributed under.
 
-There is no server and no database. **GitHub is the database, pull requests are
-the write path, CI is the validator, and a merge is the deploy.** Every change
-is a pull request; a human merges it; merging regenerates and republishes the
-static site.
+There is no application server and no database. **Git is the database, pull
+requests are the write path, CI is the validator, and a human merge triggers
+the static deployment workflow.** Every change is a pull request; automation
+never merges it.
 
-## What is served
+## What deployment serves
+
+When the deployment workflow is configured, it publishes:
 
 - `https://cartridge.app/r/index.json` — the full index: one
   `{name, title, size_bytes, version, license}` row per listing, sorted by name.
@@ -22,8 +24,7 @@ static site.
   (`registry/<name>` listings live at `r/<name>.json`; third-party
   `<org>/<name>` listings live at `r/<org>/<name>.json`).
 
-The same tree is also live on GitHub Pages at
-`https://parotresearch.github.io/registry/r/index.json`.
+The same static tree is published to the configured GitHub Pages endpoint.
 
 ## Publishing a cartridge
 
@@ -42,8 +43,8 @@ The manual path is to add the listing by hand and open a PR at
    `cartridge.app`).
 2. Add `r/<org>/<name>.json` following the schema in
    [`docs/registry.md`](docs/registry.md).
-3. Open a pull request; fill in the template, including the rights-warranty
-   checkbox.
+3. Open a pull request; fill in the template and check the complete
+   rights-warranty text exactly as written.
 
 CI validates the listing and comments the result. It never merges — a
 maintainer does that.
@@ -69,10 +70,19 @@ uv run scripts/validate.py r/shakespeare.json \
 - `--skip-network` skips the checks that need the internet (URL reachability,
   GitHub org membership, the open-PR rate limit). They are reported as
   **skipped**, never as passed.
-- Point `CARTRIDGE_BIN` at a `cartridge` reader to run the card comparison
-  locally; without it, that check is skipped visibly.
 - `--file FILE.cart` uses a local cartridge file for the checksum and card
   checks instead of downloading it.
+- Card comparison requires both `CARTRIDGE_BIN` and
+  `CARTRIDGE_SANDBOX_IMAGE`; the reader is mounted into a no-network Docker
+  container with a 4 GiB memory limit, a 256-process limit, and a hard timeout.
+  The validator refuses to execute a reader directly.
+
+CI defaults the reader URL to
+`https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz`. Set
+`CARTRIDGE_READER_SHA256` to the digest published beside that gzip archive and
+set `CARTRIDGE_SANDBOX_IMAGE` to a compatible image. A custom
+`CARTRIDGE_READER_URL` must likewise name a gzip archive; CI verifies its
+compressed bytes before unpacking it.
 
 Regenerate the index and check it in sync:
 
@@ -89,20 +99,25 @@ uv run pytest
 
 ## How deploys work
 
-On every push to `main` (i.e. after a merge), `deploy.yml`:
+When a human merge pushes to `main`, `deploy.yml` is configured to:
 
-1. Regenerates `r/index.json` and commits it back if it changed.
-2. Publishes the `r/` tree to **GitHub Pages** — live immediately at
-   `https://parotresearch.github.io/registry/r/`.
-3. Optionally publishes the same tree to **Cloudflare**, routed at
+1. Regenerate `r/index.json` and commit it back if it changed.
+2. Publish the exact assembled static tree to the repository's GitHub Pages
+   environment as a mirror.
+3. Optionally deploy that same tree as the `cartridge-registry` **Cloudflare
+   Workers static-assets** service on the path-specific Workers Route
    `cartridge.app/r/*`, with `Content-Type: application/json` and long-lived
-   caching for every listing except `index.json`. This job is **skipped** until
-   the user sets the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets
-   and flips the `CLOUDFLARE_DEPLOY` repository variable to `true`.
+   caching for every listing except `index.json`. The route takes precedence
+   over the existing website's Pages custom domain only for `/r/*`; every other
+   website path stays unchanged. This job is **skipped** until the user sets the
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets and flips the
+   `CLOUDFLARE_DEPLOY` repository variable to `true`.
 
-The reader-backed card check in `validate.yml` is likewise **skipped** until the
-`CARTRIDGE_READER_URL` and `CARTRIDGE_READER_SHA256` repository variables are
-set.
+The reader-backed card check is skipped only while every reader setting is
+absent. Once any reader setting is present, CI obtains the configured (or
+default) gzip archive, requires its SHA256 and `CARTRIDGE_SANDBOX_IMAGE`, and
+rejects incomplete configuration rather than running a reader outside its
+sandbox.
 
 ## Learn more
 

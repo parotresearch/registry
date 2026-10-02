@@ -55,11 +55,18 @@ LICENSE_ALLOWLIST = (
 )
 MAX_BYTES = 50 * 1024 * 1024 * 1024  # 50 GiB hard cap
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
-WARRANTY_CHECKBOX = "- [x] I have the right to distribute this content in this form."
+WARRANTY_TEXT = (
+    "I have the right to distribute this content in this form. A cartridge "
+    "reproduces its source byte for byte, so listing it is redistributing the "
+    "text. If someone claims otherwise, the listing comes down while it is "
+    "resolved, and the DMCA agent named at cartridge.app/legal handles the notice."
+)
+WARRANTY_CHECKBOX = f"- [x] {WARRANTY_TEXT}"
 RESERVED_NAMESPACE = "registry"
 MAX_OPEN_PRS = 5
 GITHUB_API = "https://api.github.com"
 HTTP_TIMEOUT = 30
+READER_TIMEOUT_SECONDS = 120
 
 # ---------------------------------------------------------------------------
 # Verdicts
@@ -121,7 +128,7 @@ class Ctx:
     skip_network: bool
     local_file: Path | None
     token: str | None
-    reader_cmd_prefix: list[str] | None  # e.g. ["/path/to/cartridge"] or docker wrapper
+    reader_cmd_prefix: list[str] | None  # required no-network reader sandbox command
     repo: str | None  # "owner/name" for the rate-limit search
     download_cache: list = None  # memoised downloaded file path (single-element box)
 
@@ -349,13 +356,36 @@ def first_diff(a, b, path: str = "card"):
     return None
 
 
+def _sandboxed_reader_prefix(prefix: list[str]) -> bool:
+    """Whether a reader command is constrained to the required container sandbox."""
+    required_options = (
+        ("--network", "none"),
+        ("--memory", "4g"),
+        ("--pids-limit", "256"),
+    )
+    if prefix[:5] != ["timeout", "--kill-after=5s", "120s", "docker", "run"]:
+        return False
+    if "--rm" not in prefix or "--read-only" not in prefix or prefix.count("--volume") != 2:
+        return False
+    return all(
+        option in prefix and prefix[prefix.index(option) + 1] == value
+        for option, value in required_options
+    )
+
+
 def run_reader(prefix: list[str], file_path: Path) -> dict:
-    """Run the cartridge reader on the file, returning its info JSON."""
-    if "{file}" in " ".join(prefix):
-        cmd = [part.replace("{file}", str(file_path)) for part in prefix]
-    else:
-        cmd = [*prefix, "info", "--json", str(file_path)]
-    completed = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    """Run the cartridge reader in the required no-network container sandbox."""
+    if not _sandboxed_reader_prefix(prefix):
+        raise RuntimeError(
+            "reader command is not the required no-network, resource-limited container sandbox"
+        )
+    cmd = [part.replace("{file}", str(file_path.resolve())) for part in prefix]
+    completed = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=READER_TIMEOUT_SECONDS + 10,
+    )
     if completed.returncode != 0:
         raise RuntimeError(
             f"reader exited {completed.returncode}: {completed.stderr.strip() or completed.stdout.strip()}"
@@ -365,16 +395,19 @@ def run_reader(prefix: list[str], file_path: Path) -> dict:
 
 def check_card(ctx: Ctx) -> list[Verdict]:
     if ctx.reader_cmd_prefix is None:
-        return _skip("card-check", "reader not configured (set CARTRIDGE_BIN or the CI reader vars)")
+        return _skip(
+            "card-check",
+            "reader not configured (set CARTRIDGE_BIN and CARTRIDGE_SANDBOX_IMAGE)",
+        )
     local = resolve_file(ctx)
     if local is None:
         return _skip("card-check", "no cartridge file available to read")
     # `cartridge info FILE --json` prints a wrapper object; the card lives in
     # its `.card` field and the seal state in `.seal.status` (a string). A
     # licensed press writes `valid` (or `legacy` until the press service ships);
-    # `missing`, `unsealed`, `invalid`, or an absent seal are refused. A
-    # dev/no-licence press is caught upstream: the release reader refuses to
-    # open it, so `info` exits non-zero and run_reader raises.
+    # `missing`, `unsealed`, `invalid`, or an absent seal are refused. Reader
+    # compatibility and an accepted seal status do not identify how the file
+    # was pressed; the policy, card, and seal gates enforce that contract.
     info = run_reader(ctx.reader_cmd_prefix, local)
     seal = info.get("seal")
     if not isinstance(seal, dict) or not isinstance(seal.get("status"), str):
@@ -410,10 +443,10 @@ def check_warranty(ctx: Ctx) -> list[Verdict]:
     if WARRANTY_CHECKBOX not in normalized:
         return _fail(
             "warranty",
-            "PR body is missing the checked warranty checkbox "
+            "PR body is missing the checked checkbox containing the complete warranty text "
             f"('{WARRANTY_CHECKBOX}')",
         )
-    return _pass("warranty", "warranty true and PR body carries the checked checkbox")
+    return _pass("warranty", "warranty true and PR body carries the checked, complete text")
 
 
 def check_rate_limit(ctx: Ctx) -> list[Verdict]:
@@ -482,22 +515,44 @@ def parse_codeowners(path: Path) -> set[str]:
 
 
 def reader_prefix() -> list[str] | None:
-    """The command prefix that runs the reader, or None when unconfigured.
-
-    A docker sandbox image in CARTRIDGE_SANDBOX_IMAGE wraps CARTRIDGE_BIN with
-    --network none and resource limits; otherwise CARTRIDGE_BIN runs directly.
-    """
+    """Build the required no-network, resource-limited reader sandbox command."""
     binary = os.environ.get("CARTRIDGE_BIN")
-    if not binary:
-        return None
     image = os.environ.get("CARTRIDGE_SANDBOX_IMAGE")
-    if image:
-        return [
-            "docker", "run", "--rm", "--network", "none", "--memory", "4g",
-            "--pids-limit", "256", "-v", "{file}:/cart:ro", image,
-            binary, "info", "--json", "/cart",
-        ]
-    return [binary]
+    if binary is None and image is None:
+        return None
+    if binary is None:
+        raise RuntimeError("CARTRIDGE_BIN must be set when CARTRIDGE_SANDBOX_IMAGE is configured")
+    if image is None:
+        raise RuntimeError(
+            "CARTRIDGE_SANDBOX_IMAGE must be set; refusing to run a reader outside the sandbox"
+        )
+    reader = Path(binary).resolve()
+    if not reader.is_file():
+        raise RuntimeError(f"CARTRIDGE_BIN does not name a file: {reader}")
+    return [
+        "timeout",
+        "--kill-after=5s",
+        f"{READER_TIMEOUT_SECONDS}s",
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--memory",
+        "4g",
+        "--pids-limit",
+        "256",
+        "--read-only",
+        "--volume",
+        f"{reader}:/reader:ro",
+        "--volume",
+        "{file}:/cart:ro",
+        image,
+        "/reader",
+        "info",
+        "--json",
+        "/cart",
+    ]
 
 
 # ---------------------------------------------------------------------------
