@@ -53,6 +53,27 @@ def test_schema_valid(validate, pass_listing):
     assert validate.check_schema(ctx)[0].status == "pass"
 
 
+def test_schema_source_url_optional(validate, pass_listing):
+    doc = copy.deepcopy(pass_listing)
+    del doc["source_url"]
+    ctx = make_ctx(validate, doc)
+    assert validate.check_schema(ctx)[0].status == "pass"
+
+
+def test_schema_source_url_still_https_when_present(validate, pass_listing):
+    doc = copy.deepcopy(pass_listing)
+    doc["source_url"] = "http://insecure.example/"
+    ctx = make_ctx(validate, doc)
+    assert validate.check_schema(ctx)[0].status == "fail"
+
+
+def test_summary_comment_source_none_when_absent(validate, pass_listing):
+    doc = copy.deepcopy(pass_listing)
+    del doc["source_url"]
+    ctx = make_ctx(validate, doc)
+    assert "- **source**: none" in validate.summary_comment(ctx, [], True)
+
+
 def test_schema_unknown_field(validate, pass_listing):
     doc = copy.deepcopy(pass_listing)
     doc["surprise"] = 1
