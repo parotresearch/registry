@@ -569,7 +569,7 @@ def summary_comment(ctx: Ctx, verdicts: list[Verdict], ok: bool) -> str:
             f"- **name**: `{doc['name']}`",
             f"- **size**: {doc['size_bytes']:,} bytes",
             f"- **license**: {doc['license']}",
-            f"- **source**: {doc['source_url']}",
+            f"- **source**: {doc.get('source_url', 'none')}",
             f"- **publisher**: {doc['publisher']}",
             "- **urls**:",
             *[f"  - {u}" for u in doc["urls"]],
