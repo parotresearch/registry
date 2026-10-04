@@ -31,7 +31,7 @@ The same static tree is published to the configured GitHub Pages endpoint.
 The easy path is the presser:
 
 ```
-cartpress push FILE.cart --name org/name --url https://…/name.cart
+cartpress publish FILE.cart --name org/name --url https://…/name.cart
 ```
 
 That opens a pull request adding `r/<org>/<name>.json` for you.
