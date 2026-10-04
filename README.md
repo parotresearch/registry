@@ -84,12 +84,12 @@ CI defaults the reader URL to
 beside it; CI downloads that file and verifies the archive against it before
 unpacking, so no pinned digest is needed.
 
-A listing PR adds only its own `r/<org>/<name>.json`; the merge regenerates
-`r/index.json`. To regenerate or check it locally:
+A listing PR adds only its own `r/<org>/<name>.json`. `r/index.json` is never
+committed: every deploy generates it from the listings on `main`. To preview it
+locally (the file is gitignored):
 
 ```
-uv run scripts/build-index.py          # rewrite r/index.json
-uv run scripts/build-index.py --check  # fail if it is out of date (a maintainer or `deploy.yml` can run this)
+uv run scripts/build-index.py          # write r/index.json
 ```
 
 Run the tests:
@@ -102,7 +102,8 @@ uv run pytest
 
 When a human merge pushes to `main`, `deploy.yml` is configured to:
 
-1. Regenerate `r/index.json` and commit it back if it changed.
+1. Generate `r/index.json` inside the site tree (it is never committed back;
+   `main` only accepts pull requests).
 2. Publish the exact assembled static tree to the repository's GitHub Pages
    environment as a mirror.
 3. Optionally deploy that same tree as the `cartridge-registry` **Cloudflare

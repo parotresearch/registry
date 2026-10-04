@@ -11,3 +11,6 @@ uv.lock
 
 # Local downloads made by validate.py's byte check
 .cartridge-download/
+
+# Generated at deploy time by scripts/build-index.py; never committed.
+r/index.json
