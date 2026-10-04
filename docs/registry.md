@@ -85,9 +85,8 @@ listing:
 ]
 ```
 
-`build-index.py --check` fails if the committed index is out of date. A listing
-PR adds only its own listing file; the merge to `main` regenerates and commits
-the index (see Deploy path).
+A listing PR adds only its own listing file. `r/index.json` is never committed:
+every deploy generates it from the listings on `main` (see Deploy path).
 
 ## Pull-request flow
 
@@ -149,7 +148,8 @@ fails loudly.
 
 On every push to `main`:
 
-1. `r/index.json` is regenerated and committed back if it changed.
+1. `r/index.json` is generated inside the site tree from the listings on
+   `main`; it is never committed back (`main` only accepts pull requests).
 2. The exact assembled static tree is published to **GitHub Pages** (build
    type: workflow) as a mirror, immediately live at
    `https://parotresearch.github.io/registry/r/`.

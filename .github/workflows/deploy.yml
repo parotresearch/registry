@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write   # to commit a regenerated r/index.json back
+  contents: read
   pages: write      # to deploy to GitHub Pages
   id-token: write   # for the Pages deployment
 
@@ -27,23 +27,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Regenerate r/index.json
-        run: uv run scripts/build-index.py
-
-      - name: Commit the index back if it changed
-        run: |
-          #!/usr/bin/env bash
-          set -euo pipefail
-          if git diff --quiet -- r/index.json; then
-            echo "index.json already current; nothing to commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add r/index.json
-          git commit -m "chore: regenerate r/index.json"
-          git push origin HEAD:main
-
       - name: Assemble the site tree (r/ under an r/ prefix)
         run: |
           #!/usr/bin/env bash
@@ -51,6 +34,9 @@ jobs:
           rm -rf _site
           mkdir -p _site
           cp -r r _site/r
+          # The index is a build artifact: generated here from the listings on
+          # main, never committed back (main only accepts pull requests).
+          uv run scripts/build-index.py --registry-dir _site/r
           cp _headers _site/_headers
           cat > _site/index.html <<'HTML'
           <!doctype html><meta charset="utf-8">
