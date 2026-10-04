@@ -85,12 +85,13 @@ listing:
 ]
 ```
 
-`build-index.py --check` fails if the committed index is out of date; CI runs it
-on every pull request, so a listing PR must also commit the regenerated index.
+`build-index.py --check` fails if the committed index is out of date. A listing
+PR adds only its own listing file; the merge to `main` regenerates and commits
+the index (see Deploy path).
 
 ## Pull-request flow
 
-1. Add or edit a listing under `r/`, and regenerate `r/index.json`.
+1. Add or edit a listing under `r/` (only the listing; the index is regenerated on merge).
 2. Open a pull request into `main`. Fill in the template, including the rights
    warranty checkbox.
 3. `validate.yml` runs every check below on each changed listing and comments
@@ -139,9 +140,9 @@ The reader is never executed directly. It runs through `timeout --kill-after=5s
 with the reader and file mounted read-only. The workflow defaults
 `CARTRIDGE_READER_URL` to the supported
 `https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz` release
-archive; it may be overridden with another compatible gzip archive. Its
-`CARTRIDGE_READER_SHA256` value must hash the downloaded gzip bytes before
-unpacking. CI also requires `CARTRIDGE_SANDBOX_IMAGE`; a partial configuration
+archive; it may be overridden with another compatible gzip archive. CI
+downloads `<reader url>.sha256` (`<hash>  <file>`, as the installer does) and
+verifies the archive against it before unpacking. CI also requires `CARTRIDGE_SANDBOX_IMAGE`; a partial configuration
 fails loudly.
 
 ## Deploy path

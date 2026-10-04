@@ -55,10 +55,3 @@ def test_check_fails_when_stale(build_index, tmp_path):
     )
     assert result.returncode == 1
     assert "STALE" in result.stderr
-
-
-def test_repo_index_is_current(build_index):
-    """The committed r/index.json is in sync with the listings in r/."""
-    registry_dir = ROOT / "r"
-    expected = build_index.render(build_index.build_index(registry_dir))
-    assert (registry_dir / "index.json").read_text() == expected

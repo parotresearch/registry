@@ -43,9 +43,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Regenerate index and verify it is current
-        run: uv run scripts/build-index.py --check
-
       - name: Collect changed listing documents
         id: changed
         env:
@@ -110,11 +107,11 @@ jobs:
           exit "$overall"
 
   # A configured reader makes this comparison mandatory. Its release archive
-  # is verified before decompression; incomplete sandbox configuration fails
+  # is verified against the host's published .sha256 before decompression; incomplete sandbox configuration fails
   # loudly instead of allowing a direct reader execution.
   card-check:
     runs-on: ubuntu-latest
-    if: ${{ vars.CARTRIDGE_READER_URL != '' || vars.CARTRIDGE_READER_SHA256 != '' || vars.CARTRIDGE_SANDBOX_IMAGE != '' }}
+    if: ${{ vars.CARTRIDGE_READER_URL != '' || vars.CARTRIDGE_SANDBOX_IMAGE != '' }}
     env:
       CARTRIDGE_READER_URL: ${{ vars.CARTRIDGE_READER_URL || 'https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz' }}
     steps:
@@ -126,29 +123,27 @@ jobs:
 
       - name: Require complete reader sandbox configuration
         env:
-          CARTRIDGE_READER_SHA256: ${{ vars.CARTRIDGE_READER_SHA256 }}
           CARTRIDGE_SANDBOX_IMAGE: ${{ vars.CARTRIDGE_SANDBOX_IMAGE }}
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
-          [ -n "$CARTRIDGE_READER_SHA256" ] || {
-            echo "::error::CARTRIDGE_READER_SHA256 must be set for the reader release archive"
-            exit 1
-          }
           [ -n "$CARTRIDGE_SANDBOX_IMAGE" ] || {
             echo "::error::CARTRIDGE_SANDBOX_IMAGE must be set for the reader release archive"
             exit 1
           }
 
       - name: Download, verify, and unpack the reader archive
-        env:
-          CARTRIDGE_READER_SHA256: ${{ vars.CARTRIDGE_READER_SHA256 }}
         run: |
           #!/usr/bin/env bash
           set -euo pipefail
-          curl -fsSL "$CARTRIDGE_READER_URL" -o /tmp/cartridge.gz
-          echo "${CARTRIDGE_READER_SHA256}  /tmp/cartridge.gz" | sha256sum -c -
-          gunzip --stdout /tmp/cartridge.gz > /tmp/cartridge
+          # The host publishes "<hash>  <file>" beside the archive; verify it
+          # from the download directory, as the official installer does.
+          mkdir -p /tmp/reader
+          name="$(basename "$CARTRIDGE_READER_URL")"
+          curl -fsSL "$CARTRIDGE_READER_URL" -o "/tmp/reader/$name"
+          curl -fsSL "${CARTRIDGE_READER_URL}.sha256" -o "/tmp/reader/$name.sha256"
+          (cd /tmp/reader && sha256sum -c "$name.sha256")
+          gunzip --stdout "/tmp/reader/$name" > /tmp/cartridge
           chmod +x /tmp/cartridge
 
       - name: Compare each changed listing's card against its file

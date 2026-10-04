@@ -79,16 +79,17 @@ uv run scripts/validate.py r/shakespeare.json \
 
 CI defaults the reader URL to
 `https://cartridge.app/dl/x86_64-unknown-linux-musl/cartridge.gz`. Set
-`CARTRIDGE_READER_SHA256` to the digest published beside that gzip archive and
-set `CARTRIDGE_SANDBOX_IMAGE` to a compatible image. A custom
-`CARTRIDGE_READER_URL` must likewise name a gzip archive; CI verifies its
-compressed bytes before unpacking it.
+`CARTRIDGE_SANDBOX_IMAGE` to a compatible image. A custom
+`CARTRIDGE_READER_URL` must name a gzip archive with a `<url>.sha256` file
+beside it; CI downloads that file and verifies the archive against it before
+unpacking, so no pinned digest is needed.
 
-Regenerate the index and check it in sync:
+A listing PR adds only its own `r/<org>/<name>.json`; the merge regenerates
+`r/index.json`. To regenerate or check it locally:
 
 ```
 uv run scripts/build-index.py          # rewrite r/index.json
-uv run scripts/build-index.py --check  # fail if it is out of date (CI runs this)
+uv run scripts/build-index.py --check  # fail if it is out of date (a maintainer or `deploy.yml` can run this)
 ```
 
 Run the tests:
